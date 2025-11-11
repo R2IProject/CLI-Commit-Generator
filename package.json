@@ -1,0 +1,61 @@
+{
+  "name": "commit-generator",
+  "displayName": "Commit GEN",
+  "description": "Generate conventional commit messages automatically (VS Code + CLI).",
+  "publisher": "Wreana",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "commit-gen.generateMessage",
+        "title": "CommitGen: Generate Commit Message"
+      }
+    ]
+  },
+  "bin": {
+    "commit-gen": "./out/cli.js",
+    "cg": "./out/cli.js",
+    "cgm": "./out/cli.js",
+    "commitgpt": "./out/cli.js"
+  },
+  "scripts": {
+    "build": "npm run compile",
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test",
+    "cli": "ts-node src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/node-fetch": "^2.6.13",
+    "@types/vscode": "^1.104.0",
+    "@typescript-eslint/eslint-plugin": "^8.39.0",
+    "@typescript-eslint/parser": "^8.39.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "commander": "^11.0.0",
+    "eslint": "^9.32.0",
+    "generator-code": "^1.8.0",
+    "inquirer": "^9.3.8",
+    "typescript": "^5.9.2",
+    "yo": "^5.0.0"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "dotenv": "^17.2.3",
+    "node-fetch": "^3.3.2",
+    "openai": "^6.1.0"
+  }
+}
