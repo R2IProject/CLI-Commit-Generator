@@ -1,6 +1,6 @@
 Before it started make sure ollama is installed in your device
 
-Install the requeired modules
+Install the required modules
 npm i -- or -- npm install
 
 then when it success build the project with command:
