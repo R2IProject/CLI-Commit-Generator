@@ -1,86 +1,175 @@
 #!/usr/bin/env node
-import simpleGit from "simple-git";
+import { createInterface } from "node:readline/promises";
+import { Command } from "commander";
 import inquirer from "inquirer";
+import { readConfig } from "./config.js";
+import { commit, getStagedChanges } from "./git.js";
+import { generateCommitMessage } from "./ollama.js";
+import { buildCommitPrompt } from "./prompt.js";
 
-const git = simpleGit();
+const DEFAULT_MAX_DIFF_BYTES = 120_000;
 
-async function generateCommitMessage() {
-  try {
-    // Get staged changes
-    const diff = await git.diff(["--staged"]);
-    if (!diff.trim()) {
-      console.log("⚠️  No staged changes found.");
-      return;
+interface CliOptions {
+  host?: string;
+  model?: string;
+  yes?: boolean;
+  print?: boolean;
+}
+
+const program = new Command()
+  .name("cgm")
+  .description("Generate a Conventional Commit message from staged Git changes.")
+  .option("-m, --model <name>", "Ollama model name")
+  .option("--host <url>", "Ollama host URL")
+  .option("-y, --yes", "commit with the generated message without prompting")
+  .option("--print", "print the generated message without committing")
+  .showHelpAfterError();
+
+program.parse();
+
+const options = program.opts<CliOptions>();
+
+try {
+  await run(options);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`Error: ${message}`);
+  process.exitCode = 1;
+}
+
+async function run(options: CliOptions): Promise<void> {
+  const changes = await getStagedChanges();
+  if (!changes.summary.trim()) {
+    console.log("No staged changes found.");
+    return;
+  }
+
+  const config = readConfig(options);
+  console.log(`Generating commit message with ${config.model}...`);
+
+  const suggestion = await generateCommitMessage({
+    host: config.host,
+    model: config.model,
+    prompt: buildCommitPrompt(changes.summary, truncateDiff(changes.diff)),
+  });
+
+  if (options.print) {
+    console.log(suggestion);
+    return;
+  }
+
+  const message = options.yes ? suggestion : await confirmMessage(suggestion);
+  if (!message) {
+    console.log("Commit cancelled.");
+    return;
+  }
+
+  await commit(message);
+  console.log(`Commit created: ${message}`);
+}
+
+function truncateDiff(diff: string): string {
+  const maxBytes = Number(process.env.CGM_MAX_DIFF_BYTES ?? DEFAULT_MAX_DIFF_BYTES);
+  const limit = Number.isFinite(maxBytes) && maxBytes > 0 ? maxBytes : DEFAULT_MAX_DIFF_BYTES;
+  const bytes = Buffer.byteLength(diff);
+
+  if (bytes <= limit) {
+    return diff;
+  }
+
+  return `${diff.slice(0, limit)}
+
+[Diff truncated from ${bytes} bytes to ${limit} bytes. Increase CGM_MAX_DIFF_BYTES to send more context.]`;
+}
+
+async function confirmMessage(suggestion: string): Promise<string | undefined> {
+  console.log(`\nSuggested commit:\n${suggestion}\n`);
+
+  const { action } = await inquirer.prompt<{ action: string }>([
+    {
+      type: "list",
+      name: "action",
+      message: "Use this commit message?",
+      choices: ["Commit", "Edit", "Cancel"],
+    },
+  ]);
+
+  if (action === "Cancel") {
+    return undefined;
+  }
+
+  if (action === "Edit") {
+    return editCommitMessage(suggestion);
+  }
+
+  return suggestion;
+}
+
+interface CommitParts {
+  type: string;
+  scope: string;
+  summary: string;
+}
+
+async function editCommitMessage(suggestion: string): Promise<string> {
+  const parts = parseCommitMessage(suggestion);
+
+  const type = await promptRequiredEditableLine("Type", parts.type);
+  const scope = await promptEditableLine("Scope", parts.scope);
+  const summary = await promptRequiredEditableLine("Summary", parts.summary);
+
+  return formatCommitMessage({ type, scope, summary });
+}
+
+function parseCommitMessage(message: string): CommitParts {
+  const match = message.trim().match(/^(\w+)(?:\(([^)]+)\))?:\s*(.+)$/);
+
+  if (!match) {
+    return {
+      type: "chore",
+      scope: "",
+      summary: message.trim(),
+    };
+  }
+
+  return {
+    type: match[1],
+    scope: match[2] ?? "",
+    summary: match[3],
+  };
+}
+
+function formatCommitMessage({ type, scope, summary }: CommitParts): string {
+  if (scope) {
+    return `${type}(${scope}): ${summary}`;
+  }
+
+  return `${type}: ${summary}`;
+}
+
+async function promptRequiredEditableLine(label: string, defaultValue: string): Promise<string> {
+  while (true) {
+    const answer = await promptEditableLine(label, defaultValue);
+
+    if (answer) {
+      return answer;
     }
 
-    console.log("🧠 Generating commit message...");
-
-    // Prepare your prompt
-    const prompt = `
-You are an AI that writes concise, conventional commit messages for Git.
-Use the format: <type>(optional-scope): <short summary>
-Types: feat, fix, refactor, chore, docs, test, style, build, ci, perf.
-
-Analyze the staged git diff below and produce ONE clear, meaningful commit message.
-Focus on intent and not filenames. Avoid generic words like "update" or "change".
-
-Git diff:
-${diff}
-`;
-
-    // Call Ollama API
-    const response = await fetch("http://localhost:11434/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "deepseek-v3.1:671b-cloud", // or "codellama" if you prefer code-focused model
-        prompt,
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const suggested = (data.response || "").trim();
-
-    console.log("\n✅ Suggested commit message:\n", suggested, "\n");
-
-    // Ask what to do next
-    const { action } = await inquirer.prompt([
-      {
-        type: "list",
-        name: "action",
-        message: "What do you want to do?",
-        choices: ["Accept & commit", "Edit message", "Cancel"],
-      },
-    ]);
-
-    let finalMessage = suggested;
-
-    if (action === "Edit message") {
-      const { edited } = await inquirer.prompt([
-        {
-          type: "input",
-          name: "edited",
-          message: "Edit your commit message:",
-          default: suggested,
-        },
-      ]);
-      finalMessage = edited;
-    }
-
-    if (action === "Accept & commit" || action === "Edit message") {
-      await git.commit(finalMessage);
-      console.log("✅ Commit created successfully!");
-    } else {
-      console.log("❌ Commit cancelled.");
-    }
-  } catch (error: any) {
-    console.error("❌ Error generating commit message:", error.message);
+    console.log(`${label} is required.`);
   }
 }
 
-generateCommitMessage();
+async function promptEditableLine(label: string, defaultValue: string): Promise<string> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    const answerPromise = rl.question(`${label}: `);
+    rl.write(defaultValue);
+    return (await answerPromise).trim();
+  } finally {
+    rl.close();
+  }
+}
