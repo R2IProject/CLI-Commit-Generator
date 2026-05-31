@@ -1,139 +1,70 @@
-#  Project Setup Guide (with Ollama Integration)
+# Commit Generator
 
-This guide explains how to install Ollama, configure this project, and run the DeepSeek-V3.1:671B-Cloud model locally or via the cloud.
+CLI for generating Conventional Commit messages from staged Git changes with Ollama.
 
-------------------------------------------------------------
-1. PREREQUISITES
-------------------------------------------------------------
+## Requirements
 
-Before starting, make sure you have:
+- Node.js 18.18 or newer
+- Git
+- Ollama running at `http://127.0.0.1:11434`
 
-Node.js (v18 or later) and npm installed:
-  node -v
-  npm -v
+## Install
 
-Git installed:
-  git --version
+```sh
+npm install
+npm run build
+npm install -g .
+```
 
-Ollama installed (see below)
+## Usage
 
-------------------------------------------------------------
-2. INSTALLING OLLAMA
-------------------------------------------------------------
+Stage your changes, then run:
 
-Ollama is required to run large language models locally or through the cloud.
+```sh
+cgm
+```
 
-For Linux (CachyOS, Arch, Ubuntu, Debian, Fedora, etc.):
-  curl -fsSL https://ollama.com/install.sh | sh
+The CLI reads `git diff --staged`, asks Ollama for one Conventional Commit message, then lets you commit, edit the message, or cancel.
 
-For Arch-based systems (like CachyOS), you can also install from AUR:
-  yay -S ollama
+Useful options:
 
-Verify installation:
-  ollama --version
+```sh
+cgm --model deepseek-r1:8b
+cgm --host http://127.0.0.1:11434
+cgm --print
+cgm --yes
+```
 
-If it shows a version number (e.g. ollama version 0.4.2), you’re good to go.
+Environment variables:
 
-------------------------------------------------------------
-3. START AND CONFIGURE OLLAMA
-------------------------------------------------------------
+```sh
+CGM_OLLAMA_MODEL=deepseek-r1:8b cgm
+OLLAMA_HOST=http://127.0.0.1:11434 cgm
+CGM_MAX_DIFF_BYTES=200000 cgm
+```
 
-Start the Ollama service:
-  ollama serve
+Default model: `qwen3-coder:480b-cloud`.
+Default detailed diff limit: `120000` bytes. Generated lockfile diffs are summarized instead of sent in full.
 
-This starts the Ollama server on localhost:11434.
-Keep this running in a separate terminal window.
+## Development
 
-Sign in to your Ollama account:
-  ollama signin
+```sh
+npm run dev -- --print
+npm run lint
+npm run build
+npm run check
+```
 
-Follow the link in your browser to complete authentication.
+## Ollama
 
-Run the DeepSeek model (Cloud):
-  ollama run deepseek-v3.1:671b-cloud
+Start Ollama before running the CLI:
 
-Ollama will download and start the DeepSeek-V3.1 (671B Cloud) model.
-You’ll see a prompt like:
-  >>> Hello, DeepSeek!
+```sh
+ollama serve
+```
 
-Type messages to chat with it, and exit with:
-  /bye
+Pull or run the model you want to use:
 
-------------------------------------------------------------
-4. INSTALL PROJECT DEPENDENCIES
-------------------------------------------------------------
-
-In your project folder:
-  npm install
-
-or
-  npm i
-
-This installs all required modules listed in package.json.
-
-------------------------------------------------------------
-5. BUILD THE PROJECT
-------------------------------------------------------------
-
-Once dependencies are installed:
-  npm run build
-
-This compiles the project into a production-ready bundle.
-
-------------------------------------------------------------
-6. INSTALL THE PROJECT GLOBALLY (OPTIONAL)
-------------------------------------------------------------
-
-If you want to use this project as a global command:
-  npm install -g .
-
-After that, you can run the command from anywhere:
-  cgm or cg
-
-(Replace "your-command-name" with the actual CLI name defined in your package.json under the "bin" field.)
-
-------------------------------------------------------------
-7. VERIFY EVERYTHING WORKS
-------------------------------------------------------------
-
-Ensure Ollama is running:
-  curl http://localhost:11434/api/version
-
-Expected output:
-  {"version": "0.4.2"}
-
-Run your project and verify it connects successfully to the model.
-
-------------------------------------------------------------
-8. COMMAND REFERENCE
-------------------------------------------------------------
-
-Install Ollama:
-  curl -fsSL https://ollama.com/install.sh | sh
-
-Start Ollama:
-  ollama serve
-
-Sign in:
-  ollama signin
-
-Run DeepSeek Cloud Model:
-  ollama run deepseek-v3.1:671b-cloud
-
-Install project dependencies:
-  npm install
-
-Build the project:
-  npm run build
-
-Install globally:
-  npm install -g .
-
-Enable auto-start on boot:
-The steps to enable Ollama to start automatically on boot may vary depending on your Linux distribution. Please refer to your distribution’s official documentation or wiki for detailed instructions.
-
-------------------------------------------------------------
-DONE!
-------------------------------------------------------------
-
-You’ve now installed Ollama, set up the DeepSeek cloud model, built the project, and configured it to run globally and persistently.
+```sh
+ollama run qwen3-coder:480b-cloud
+```
